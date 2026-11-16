@@ -4921,9 +4921,27 @@ function logoutConfirm(){
     setToken("");
     isAuthed = false;
     ME = null;
+    // 清空上一账号在本地的私有数据，避免切换账号时残留
+    FAVORITES = [];
+    CONTENT.notes = [];
+    CONTENT.footprints = [];
+    CONTENT.messages = { like: [], comment: [], system: [] };
+    resetLoginForm();
     historyStack = ["#/home"];
     location.hash = "#/login";
   }, true);
+}
+
+function resetLoginForm(){
+  const acc = document.getElementById("accInput");
+  const pwd = document.getElementById("pwdInput");
+  if(acc) acc.value = "";
+  if(pwd) pwd.value = "";
+  agreeChecked = false;
+  const box = document.getElementById("agreeBox");
+  if(box) box.classList.remove("checked");
+  const btn = document.getElementById("loginBtn");
+  if(btn) btn.classList.add("disabled");
 }
 
 /* ===== 我的动态 ===== */
