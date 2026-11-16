@@ -5418,11 +5418,16 @@ window.addEventListener("resize", ()=>{
 // 同源访问时自动使用 /api；直接打开本地文件时回退到 8001 端口后端
 // 部署在 GitHub Pages 时，API 指向本机通过隧道暴露的公网地址
 // ============================================================
-const PUBLIC_API = "https://2fd2c6e77fa52a54-111-55-180-203.serveousercontent.com/api";
+const PUBLIC_API = "https://5f625b7add8f69.app.lhr.life/api";
 const IS_LOCAL = location.hostname === "127.0.0.1" || location.hostname === "localhost" || location.hostname === "";
-const API_BASE = (location.protocol === "http:" || location.protocol === "https:")
-  ? (IS_LOCAL ? location.origin + "/api" : PUBLIC_API)
-  : "http://127.0.0.1:8001/api";
+// 可通过 ?api=https://xxx/api 临时指定后端地址（隧道地址变化时无需重新部署）
+let API_OVERRIDE = "";
+try { API_OVERRIDE = new URLSearchParams(location.search).get("api") || ""; } catch(e) {}
+const API_BASE = API_OVERRIDE
+  ? API_OVERRIDE.replace(/\/$/, "")
+  : ((location.protocol === "http:" || location.protocol === "https:")
+      ? (IS_LOCAL ? location.origin + "/api" : PUBLIC_API)
+      : "http://127.0.0.1:8001/api");
 
 let AUTH_TOKEN = "";
 try { AUTH_TOKEN = localStorage.getItem("sy_token") || ""; } catch(e) {}
