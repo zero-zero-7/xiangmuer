@@ -5,6 +5,8 @@ __pycache__/
 *.py[cod]
 *.db
 .gh/
+.pages/
+cloudflared.exe
 .pytest_cache/
 .screenshots/
 .trae-html-share-packages/
