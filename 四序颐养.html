@@ -3840,10 +3840,45 @@ function detectToday(q){
   return /今日|今天|今日推荐|今日养生|今天养生/.test(q);
 }
 
+function normalizeQuestion(s){
+  return (s || "").toLowerCase()
+    .replace(/疼/g, "痛")
+    .replace(/[\s啊呀呢吧吗嘛哦~～!！?？，。、；：,.!?;:'"“”‘’（）()【】\[\]「」]/g, "")
+    .replace(/^(请问|小药童|我想知道|我想问|麻烦问下|麻烦问一下)/, "")
+    .replace(/应该怎么办|怎么办|怎么调理|如何调理|怎么缓解|如何缓解|该怎么做|如何做|怎么做|如何|怎么|什么|请问|一下|一些|有点|感觉|最近|总是|经常|可以|应该|需要/g, "");
+}
+
+function diceScore(a, b){
+  if(!a || !b) return 0;
+  const overlap = new Set([...a].filter(x=>b.includes(x)));
+  return 2 * overlap.size / (new Set(a).size + new Set(b).size);
+}
+
+function bigramDiceScore(a, b){
+  if(a.length < 2 || b.length < 2) return 0;
+  const grams = s => Array.from({length:s.length-1}, (_,i)=>s.slice(i,i+2));
+  return diceScore(grams(a), grams(b));
+}
+
+function questionSimilarity(a, b){
+  if(!a || !b) return 0;
+  if(a === b) return 1;
+  if(a.length >= 2 && b.length >= 2 && (a.includes(b) || b.includes(a))) return .96;
+  // 中文字符相似度负责识别换序/近义写法和常见错字，二字词组相似度负责保留语序。
+  return diceScore(a, b) * .45 + bigramDiceScore(a, b) * .55;
+}
+
 function scoreRule(q, rule){
-  let s = 0;
-  for(const k of rule.kw){ if(q.includes(k)) s += k.length; }
-  return s;
+  let exact = 0, similar = 0;
+  const nq = normalizeQuestion(q);
+  const samples = rule.questions ? rule.questions.concat(rule.kw) : rule.kw;
+  for(const k of rule.kw){ if(q.includes(k)) exact += k.length; }
+  for(const sample of samples){
+    const ns = normalizeQuestion(sample);
+    if(ns.length >= 2) similar = Math.max(similar, questionSimilarity(nq, ns));
+  }
+  // 保留原关键词加权优先级；没有可靠精确命中时才采用最相似问法。
+  return exact >= 2 ? 1 + exact / 100 : similar;
 }
 
 function matchRule(q){
@@ -3852,7 +3887,7 @@ function matchRule(q){
     const sc = scoreRule(q, r);
     if(sc > bestScore){ bestScore = sc; best = r; }
   }
-  return bestScore >= 2 ? best : null;
+  return bestScore >= .30 ? best : null;
 }
 
 function detectFollowUp(q){
