@@ -1,0 +1,11 @@
+# 忽略本地配置与运行时产物
+server/.env
+server/uploads/
+__pycache__/
+*.py[cod]
+*.db
+.pytest_cache/
+.screenshots/
+.trae-html-share-packages/
+.DS_Store
+Thumbs.db
