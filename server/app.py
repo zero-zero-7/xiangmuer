@@ -112,6 +112,18 @@ def uid_of(user: dict = Depends(current_user)) -> int:
     return int(user["id"])
 
 
+def optional_uid(x_auth_token: Optional[str] = Header(default=None),
+                 authorization: Optional[str] = Header(default=None)) -> int:
+    """游客（未登录）返回 0，登录用户返回其 id；token 失效不报错。"""
+    token = x_auth_token
+    if not token and authorization:
+        token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        return 0
+    row = db.query("SELECT user_id FROM sessions WHERE token = ?", (token,), one=True)
+    return int(row["user_id"]) if row else 0
+
+
 # ------------------------------------------------------------------ 内容组装
 def content_items_full(fid: str) -> list:
     items = db.query(
@@ -372,7 +384,7 @@ def features():
 
 
 @app.get("/api/features/{fid}/items-full")
-def items_full(fid: str, uid: int = Depends(uid_of)):
+def items_full(fid: str, uid: int = Depends(optional_uid)):
     if fid == "fun":
         sql, params = visible_posts_sql(uid)
         rows = db.query(sql + " ORDER BY p.pinned DESC, p.created_at DESC, p.id DESC", params)
@@ -394,7 +406,7 @@ def search(q: str = ""):
 
 # ------------------------------------------------------------------ 社区帖子
 @app.get("/api/posts")
-def posts(uid: int = Depends(uid_of)):
+def posts(uid: int = Depends(optional_uid)):
     sql, params = visible_posts_sql(uid)
     rows = db.query(sql + " ORDER BY p.pinned DESC, p.created_at DESC, p.id DESC", params)
     return [post_payload(r, uid) for r in rows]
@@ -475,7 +487,7 @@ def toggle_useful(cid: str, user: dict = Depends(current_user)):
 
 # ------------------------------------------------------------------ 评论
 @app.get("/api/posts/{post_id}/comments")
-def get_comments(post_id: int, uid: int = Depends(uid_of)):
+def get_comments(post_id: int, uid: int = Depends(optional_uid)):
     rows = db.query(
         "SELECT c.* FROM comments c LEFT JOIN users u ON u.id = c.user_id"
         " WHERE c.post_id = ? AND (u.status IS NULL OR u.status <> 'banned' OR c.user_id = ?)"
