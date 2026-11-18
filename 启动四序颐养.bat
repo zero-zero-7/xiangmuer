@@ -1,7 +1,46 @@
 @echo off
-chcp 65001 >nul
-cd /d "%~dp0server"
-echo æ­£åœ¨å¯åŠ¨å››åºé¢å…»æœåŠ¡ï¼ˆMySQL æ•°æ®åº“ï¼šsiyuï¼‰...
-start "" cmd /c "timeout /t 4 >nul & start "" http://127.0.0.1:8001/"
-python -m uvicorn app:app --host 127.0.0.1 --port 8001
+chcp 936 >nul
+title ËÄÐòÒÃÑø ¡¤ Ò»¼üÆô¶¯
+mode con lines=30 cols=80
+
+echo.
+echo  ¨X¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨[
+echo  ¨U            ËÄÐòÒÃÑø ¡¤ Ò»¼üÆô¶¯½Å±¾                 ¨U
+echo  ¨U   ºó¶Ë + MySQL + ¹«Íø´©Í¸£¨Cloudflare ×Ô¶¯ÇÐ»»£©  ¨U
+echo  ¨^¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨a
+echo.
+
+cd /d "%~dp0"
+
+:: ©¤©¤ 1. MySQL ©¤©¤
+echo  [1/3] MySQL ·þÎñ...
+sc query MySQL80 | findstr /c:"RUNNING" >nul 2>&1
+if errorlevel 1 net start MySQL80 >nul 2>&1
+echo        ? ÒÑÔËÐÐ
+
+:: ©¤©¤ 2. ºó¶Ë ©¤©¤
+echo  [2/3] FastAPI ºó¶Ë (0.0.0.0:8001)...
+netstat -ano | findstr ":8001" | findstr "LISTENING" >nul 2>&1
+if errorlevel 1 (
+    cd server
+    start "ËÄÐòÒÃÑøºó¶Ë" python -m uvicorn app:app --host 0.0.0.0 --port 8001
+    cd ..
+    echo        µÈ´ýºó¶Ë¾ÍÐ÷...
+    timeout /t 6 /nobreak >nul
+)
+echo        ? ÒÑÔËÐÐ
+
+:: ©¤©¤ 3. ¶à Tunnel ÊØ»¤£¨PowerShell£© ©¤©¤
+echo  [3/3] ¹«Íø´©Í¸£¨Cloudflare + localhost.run ×Ô¶¯ÇÐ»»£©...
+echo        ÊØ»¤½Å±¾ÕýÔÚºóÌ¨Æô¶¯£¬×î¶à 20 Ãë»ñÈ¡¹«ÍøµØÖ·...
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_multi_tunnel.ps1"
+
+echo.
+echo  ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+echo  ËµÃ÷:
+echo    ? ±¾µØ·ÃÎÊ: http://127.0.0.1:8001/
+echo    ? ¹«ÍøµØÖ·: ¿´ÉÏÃæ ?? ÄÇÒ»ÐÐ
+echo    ? °´ Ctrl+C Í£Ö¹ËùÓÐ·þÎñ
+echo  ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
 pause
