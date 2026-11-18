@@ -1046,6 +1046,10 @@ h1,h2,h3,.serif{font-family:"Noto Serif SC","Songti SC","SimSun",serif}
           <span class="checkbox" id="agreeBox"></span>
           <span>已阅读并同意《用户协议》和《隐私政策》</span>
         </div>
+        <button class="login-btn" style="margin-top:10px;background:#07C160;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px" onclick="startWechatLogin()">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M9.2 4C5.2 4 2 6.7 2 10c0 1.9 1.1 3.6 2.8 4.7L4.2 17l2.6-1.3c.7.2 1.5.3 2.4.3h.5a5.8 5.8 0 0 1-.2-1.5c0-3.3 3.1-5.9 6.9-5.9h.4C16.1 6 12.9 4 9.2 4Z"/><path d="M22 14.4c0-2.7-2.6-4.9-5.8-4.9s-5.8 2.2-5.8 4.9 2.6 4.9 5.8 4.9c.7 0 1.4-.1 2-.3l2.1 1.1-.5-1.9c1.4-.9 2.2-2.2 2.2-3.8Z"/></svg>
+          微信登录
+        </button>
         <div class="login-link" onclick="openRegister()">注册新账号</div>
         <div class="login-link" onclick="openPhoneLogin()">手机号验证码登录</div>
         <div class="login-link" onclick="doDemoLogin()" style="color:#8BA8A0">演示账号快速体验</div>
@@ -1403,6 +1407,16 @@ h1,h2,h3,.serif{font-family:"Noto Serif SC","Songti SC","SimSun",serif}
       <div id="codeTip" style="font-size:12px;color:var(--seal);margin-top:8px;min-height:16px"></div>
       <button class="ps-submit" onclick="phoneLogin()">登录</button>
       <div class="sheet-cancel" onclick="closeSheet('phoneMask')">取消</div>
+    </div>
+  </div>
+
+  <!-- 微信扫码登录 -->
+  <div class="sheet-mask" id="wxMask" onclick="if(event.target===this)closeWechat()">
+    <div class="sheet-panel">
+      <div class="sheet-title">微信登录</div>
+      <div id="wxQr" style="display:flex;justify-content:center;align-items:center;min-height:160px"></div>
+      <div id="wxTip" style="font-size:12px;color:var(--ink-soft);text-align:center;line-height:1.8;margin-bottom:6px"></div>
+      <div class="sheet-cancel" onclick="closeWechat()">取消</div>
     </div>
   </div>
 
@@ -3479,7 +3493,17 @@ async function doPwdLogin(){
   try {
     const r = await api("/auth/password", { method: "POST", body: { account, password } });
     finishLogin(r, `欢迎回来，${r.user.nickname}`);
-  } catch(e){ showToast(e.message || "登录失败"); }
+  } catch(e){
+    // 未启动后端时，允许用演示账号进入离线演示，方便评委直接体验
+    if(/Failed to fetch|NetworkError|Load failed|HTTP 404|HTTP 5\d\d/i.test(e.message || "") && account === "demo" && password === "demo1234"){
+      isAuthed = true;
+      try { localStorage.setItem(AUTH_KEY, "1"); } catch(err) {}
+      showToast("后端未启动，已进入离线演示");
+      location.hash = "#/home";
+      return;
+    }
+    showToast(e.message || "登录失败");
+  }
 }
 
 function openRegister(){
@@ -3549,6 +3573,67 @@ async function phoneLogin(){
     showToast(`欢迎，${r.user.nickname}`);
     location.hash = "#/home";
   } catch(e){ showToast(e.message || "登录失败"); }
+}
+
+/* ===== 微信登录 ===== */
+let wxPollTimer = null;
+let wxPollState = "";
+
+function stopWechatPoll(){
+  if(wxPollTimer){ clearInterval(wxPollTimer); wxPollTimer = null; }
+  wxPollState = "";
+}
+
+function closeWechat(){
+  stopWechatPoll();
+  const m = document.getElementById("wxMask");
+  if(m) m.classList.remove("show");
+}
+
+async function startWechatLogin(){
+  if(!agreeChecked){ showToast("请先阅读并同意用户协议"); return; }
+  try {
+    const redirect = location.origin + location.pathname + location.search;
+    const r = await api("/auth/wechat/authorize", { method: "POST", body: { redirect } });
+    if(/MicroMessenger/i.test(navigator.userAgent || "")){
+      location.href = r.url;
+      return;
+    }
+    document.getElementById("wxQr").innerHTML = r.qr || "";
+    document.getElementById("wxTip").innerHTML = r.qr
+      ? "请用微信扫一扫，并在手机上确认授权"
+      : '二维码组件未安装，请用微信打开：<br><span style="word-break:break-all">' + r.url + "</span>";
+    document.getElementById("wxMask").classList.add("show");
+    pollWechat(r.state, true);
+  } catch(e){
+    showToast(e.message || "微信登录暂不可用");
+  }
+}
+
+function pollWechat(state, showTip){
+  stopWechatPoll();
+  wxPollState = state;
+  let tries = 0;
+  wxPollTimer = setInterval(async ()=>{
+    if(wxPollState !== state) return;
+    if(++tries > 150){
+      stopWechatPoll();
+      if(showTip) document.getElementById("wxTip").textContent = "二维码已过期，请重新发起";
+      return;
+    }
+    try {
+      const r = await api("/auth/wechat/poll?state=" + encodeURIComponent(state));
+      if(r.status === "ok"){
+        stopWechatPoll();
+        closeSheet("wxMask");
+        finishLogin(r, "微信登录成功");
+      } else if(r.status === "error" || r.status === "expired"){
+        stopWechatPoll();
+        if(showTip) document.getElementById("wxTip").textContent = r.error || "授权失败，请重试";
+        else showToast(r.error || "微信登录失败");
+      }
+    } catch(e){}
+  }, 2000);
 }
 
 /* ===== 收藏 ===== */
@@ -5418,15 +5503,18 @@ window.addEventListener("resize", ()=>{
 // 同源访问时自动使用 /api；直接打开本地文件时回退到 8001 端口后端
 // 部署在 GitHub Pages 时，API 指向本机通过隧道暴露的公网地址
 // ============================================================
-const PUBLIC_API = "https://5f625b7add8f69.app.lhr.life/api";
+const PUBLIC_API = "https://abb2fb7e2cb9dd.app.lhr.life/api";
 const IS_LOCAL = location.hostname === "127.0.0.1" || location.hostname === "localhost" || location.hostname === "";
 // 可通过 ?api=https://xxx/api 临时指定后端地址（隧道地址变化时无需重新部署）
 let API_OVERRIDE = "";
 try { API_OVERRIDE = new URLSearchParams(location.search).get("api") || ""; } catch(e) {}
+// http/https 同源访问（本机 localhost 或局域网 IP 都走同源）
+// 只有直接打开本地文件（file://）时才回退到 8001 端口
+// 公网部署通过 ?api=xxx 参数指定后端地址
 const API_BASE = API_OVERRIDE
   ? API_OVERRIDE.replace(/\/$/, "")
   : ((location.protocol === "http:" || location.protocol === "https:")
-      ? (IS_LOCAL ? location.origin + "/api" : PUBLIC_API)
+      ? location.origin + "/api"
       : "http://127.0.0.1:8001/api");
 
 let AUTH_TOKEN = "";
@@ -5566,6 +5654,18 @@ setupDesktopNav();
   await loadAllContent();
   setupDesktopNav();   // 数据加载后刷新桌面导航
   route();
+
+  // 微信授权回调跳回本页时，用 state 换回登录态
+  const wxState = new URLSearchParams(location.search).get("wx_state");
+  if(wxState){
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete("wx_state");
+      history.replaceState(null, "", u.pathname + u.search + u.hash);
+    } catch(e){}
+    showToast("正在完成微信登录…");
+    pollWechat(wxState, false);
+  }
 })();
 </script>
 </body>
