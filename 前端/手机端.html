@@ -581,7 +581,7 @@ h1,h2,h3,.serif{font-family:"Noto Serif SC","Songti SC","SimSun",serif}
 .cmt-name .del{font-size:10px;color:var(--seal);cursor:pointer;margin-left:8px;font-weight:400}
 .cmt-name .del:hover{text-decoration:underline}
 /* 桌面版：hover 评论时才显示删除按钮（低调不显眼） */
-@media (min-width:768px){
+@media (min-width:99999px){
   .cmt-item:not(:hover) .cmt-name .del{opacity:.3;transition:opacity .18s}
   .cmt-item:hover .cmt-name .del{opacity:1}
 }
@@ -634,7 +634,7 @@ h1,h2,h3,.serif{font-family:"Noto Serif SC","Songti SC","SimSun",serif}
 .ps-img-del{position:absolute;top:6px;right:6px;width:22px;height:22px;line-height:20px;text-align:center;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;font-size:14px;cursor:pointer}
 .ps-img-note{display:none;font-size:10px;color:var(--ink-soft);margin:0 0 10px 2px}
 /* ===== 桌面网页版：白色顶栏 + 主内容区 ===== */
-@media (min-width:768px){
+@media (min-width:99999px){
   body{
     background:#FAFBF8;
     padding:0;
@@ -993,8 +993,23 @@ h1,h2,h3,.serif{font-family:"Noto Serif SC","Songti SC","SimSun",serif}
   .fab{right:40px;bottom:40px;width:52px;height:52px}
 }
 /* 桌面版导航激活项下划线 */
-@media (min-width:768px){
+@media (min-width:99999px){
   .tabbar .tab.active{color:var(--primary)}
+}
+</style>
+<!-- ===== 手机版布局锁定（只改布局，不改任何内容/功能） =====
+     原样式只在 ≤420px 铺满全屏，这里把 421~767px 的机型（大屏手机/折叠屏）
+     也铺满全屏，避免出现"手机壳"小窗。≥768px 仍是电脑版布局，保持不变。 -->
+<style>
+@media (max-width:767px){
+  html,body{min-height:100dvh;min-height:100vh;background:var(--bg);padding:0}
+  .phone{
+    width:100%;height:100dvh;height:100vh;max-height:none;
+    border-radius:0;box-shadow:none;
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+  }
+  .notch{display:none}
+  .statusbar{padding-top:calc(env(safe-area-inset-top) + 12px)}
 }
 </style>
 </head>
@@ -5436,7 +5451,7 @@ function goBack(){
 }
 /* ===== 桌面版导航：注入到顶栏文档流内 ===== */
 function setupDesktopNav(){
-  const isDesktop = window.innerWidth >= 768;
+  const isDesktop = false;   // 手机端：固定使用手机版布局
   window._desktopMode = isDesktop;
   const navbar = document.querySelector(".navbar");
   const old = document.querySelector(".desktop-nav");
@@ -5491,12 +5506,7 @@ function updateDesktopNavActive(){
   });
 }
 
-window.addEventListener("resize", ()=>{
-  if(!!window._desktopMode !== (window.innerWidth >= 768)){
-    setupDesktopNav();
-    route();
-  }
-});
+// 手机版布局固定，不需要在 PC/手机两种布局之间切换
 
 // ============================================================
 // ★★★★★ API 数据加载 —— 连接后端 MySQL 数据库  ★★★★★
@@ -5573,24 +5583,25 @@ function mapItem(it){
 
 async function loadAllContent(){
   try {
-    const features = await api("/features");
-    if(!features || !features.length) throw new Error("empty");
+    const features = await api("/features").catch(()=>[]);
     const posts = await api("/posts").catch(()=>null);
 
-    const settled = await Promise.allSettled(features.map(async f=>{
-      const items = await api(`/features/${f.id}/items-full`);
-      return { id: f.id, name: f.name, desc: f.descr || "", icon: f.icon || "",
-               items: (items || []).map(mapItem) };
-    }));
+    if(Array.isArray(features) && features.length){
+      const settled = await Promise.allSettled(features.map(async f=>{
+        const items = await api(`/features/${f.id}/items-full`);
+        return { id: f.id, name: f.name, desc: f.descr || "", icon: f.icon || "",
+                 items: (items || []).map(mapItem) };
+      }));
 
-    settled.forEach((r, i)=>{
-      if(r.status === "fulfilled" && r.value.items.length){
-        const idx = CONTENT.features.findIndex(cf=>cf.id===r.value.id);
-        if(idx >= 0) CONTENT.features[idx] = r.value;
-      } else if(r.status === "rejected"){
-        console.warn(`⚠️ 功能区 ${features[i].id} 加载失败，保留内置数据:`, r.reason && r.reason.message);
-      }
-    });
+      settled.forEach((r, i)=>{
+        if(r.status === "fulfilled" && r.value.items.length){
+          const idx = CONTENT.features.findIndex(cf=>cf.id===r.value.id);
+          if(idx >= 0) CONTENT.features[idx] = r.value;
+        } else if(r.status === "rejected"){
+          console.warn(`⚠️ 功能区 ${features[i].id} 加载失败，保留内置数据:`, r.reason && r.reason.message);
+        }
+      });
+    }
 
     if(Array.isArray(posts)){
       const fi = CONTENT.features.findIndex(cf=>cf.id==="fun");

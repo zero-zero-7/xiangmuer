@@ -1,9 +1,13 @@
 # 忽略本地配置与运行时产物
-server/.env
-server/uploads/
+后端/.env
+后端/uploads/
 __pycache__/
 *.py[cod]
 *.db
+!数据库/local.db
+*.db-wal
+*.db-shm
+*.db-journal
 .gh/
 .pages/
 cloudflared.exe

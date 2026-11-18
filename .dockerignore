@@ -1,7 +1,0 @@
-cloudflared.exe
-server/local.db
-server/local.db-*
-server/__pycache__
-server/data/siyu.db
-server/.env
-*.zip

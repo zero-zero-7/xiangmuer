@@ -7,7 +7,11 @@
 """
 from datetime import datetime
 
-import db
+import os as _os
+if _os.getenv("DATABASE_URL", "").startswith("sqlite"):
+    import db_local as db
+else:
+    import db
 from security import hash_password
 
 CATEGORIES = [

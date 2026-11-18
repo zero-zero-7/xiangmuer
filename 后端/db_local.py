@@ -9,9 +9,10 @@ import sqlite3
 import threading
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent  # 和 db.py 保持一致：server/ 目录
-# 可用 SQLITE_PATH 指定数据库文件位置（部署到云托管时挂持久盘会用到）
-LOCAL_DB = Path(os.getenv("SQLITE_PATH") or (BASE / "local.db"))
+BASE = Path(__file__).resolve().parent          # 后端/
+ROOT = BASE.parent                              # 项目根目录
+# 数据库文件统一放在 数据库/local.db；可用 SQLITE_PATH 覆盖
+LOCAL_DB = Path(os.getenv("SQLITE_PATH") or (ROOT / "数据库" / "local.db"))
 
 _lock = threading.Lock()
 
@@ -207,6 +208,17 @@ SCHEMA_SQLITE = [
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         feature_id TEXT NOT NULL, name TEXT NOT NULL,
         tag TEXT DEFAULT '', summary TEXT DEFAULT '', sort INTEGER DEFAULT 0
+    )""",
+    """CREATE TABLE IF NOT EXISTS content_sections(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL, title TEXT DEFAULT '',
+        body TEXT, sort INTEGER DEFAULT 0
+    )""",
+    """CREATE TABLE IF NOT EXISTS content_links(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER, feature_id TEXT DEFAULT '',
+        title TEXT DEFAULT '', source TEXT DEFAULT '', url TEXT NOT NULL,
+        kind TEXT DEFAULT 'article', note TEXT DEFAULT '', sort INTEGER DEFAULT 0
     )""",
 ]
 

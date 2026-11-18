@@ -3,10 +3,14 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import db
+import os as _os
+if _os.getenv("DATABASE_URL", "").startswith("sqlite"):
+    import db_local as db
+else:
+    import db
 
 BASE = Path(__file__).resolve().parent
-SEED = BASE / "data" / "seed.json"
+SEED = BASE.parent / "数据库" / "seed.json"
 
 
 def now(offset_minutes=0):

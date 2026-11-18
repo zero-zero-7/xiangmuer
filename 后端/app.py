@@ -1,10 +1,14 @@
-"""四序颐养 · 后端 API（FastAPI + MySQL）
+"""四序颐养 · 后端 API（FastAPI）
+
+本地版默认 SQLite（数据库/local.db），无需安装 MySQL。
 
 启动：
-    cd server
+    cd 后端
     python -m uvicorn app:app --host 127.0.0.1 --port 8001
 打开：
-    http://127.0.0.1:8001/
+    http://127.0.0.1:8001/     自动识别：电脑 → PC 版，手机 → 手机版
+    http://127.0.0.1:8001/m    强制手机版
+    http://127.0.0.1:8001/pc   强制 PC 版
 """
 import random
 import secrets
@@ -29,13 +33,10 @@ import migrate as migrate_mod
 import api_v2
 
 BASE = Path(__file__).resolve().parent
-# 兼容本地（HTML 在父目录）和 Render 上（HTML 在 server 同级或 server 内）
-for _candidate in (BASE.parent / "四序颐养.html", BASE / "四序颐养.html"):
-    if _candidate.exists():
-        HTML_FILE = _candidate
-        break
-else:
-    HTML_FILE = BASE.parent / "四序颐养.html"  # fallback
+ROOT = BASE.parent
+# 前端两个版本：内容完全一致，仅布局适配不同
+HTML_PC = ROOT / "前端" / "PC端.html"
+HTML_MOBILE = ROOT / "前端" / "手机端.html"
 HOT_SEARCH = ["八段锦", "失眠", "湿气", "足三里", "山药", "泡脚", "立冬养生", "体质测试"]
 
 app = FastAPI(title="四序颐养 API")
@@ -293,16 +294,39 @@ def on_startup():
 app.include_router(api_v2.router)
 
 
+MOBILE_UA = ("iphone", "ipod", "ipad", "android", "mobile", "harmonyos",
+             "micromessenger", "windows phone")
+
+
+def _page(is_mobile: bool):
+    f = HTML_MOBILE if is_mobile else HTML_PC
+    if not f.exists():
+        raise HTTPException(404, f"未找到前端页面：{f}")
+    return FileResponse(f, media_type="text/html; charset=utf-8")
+
+
 @app.get("/")
-def index():
-    if not HTML_FILE.exists():
-        raise HTTPException(404, "未找到 四序颐养.html")
-    return FileResponse(HTML_FILE, media_type="text/html; charset=utf-8")
+def index(request: Request):
+    """自动识别设备：手机打开 → 手机版，电脑打开 → PC 版。"""
+    ua = (request.headers.get("user-agent") or "").lower()
+    return _page(any(k in ua for k in MOBILE_UA))
+
+
+@app.get("/m")
+def mobile_page():
+    """强制手机版。"""
+    return _page(True)
+
+
+@app.get("/pc")
+def pc_page():
+    """强制 PC 版。"""
+    return _page(False)
 
 
 @app.get("/MP_verify_{name}.txt")
 def mp_verify(name: str):
-    """微信公众平台域名校验文件（下载后放到 server/ 目录）"""
+    """微信公众平台域名校验文件（下载后放到 后端/ 目录）"""
     f = BASE / f"MP_verify_{name}.txt"
     if not f.exists():
         raise HTTPException(404, "校验文件不存在")

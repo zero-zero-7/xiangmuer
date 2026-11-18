@@ -293,7 +293,7 @@ def wechat_status():
 @router.post("/auth/wechat/authorize")
 def wechat_authorize(body: WechatAuthorizeIn, request: Request):
     if not wechat.is_configured():
-        raise HTTPException(503, "微信登录未配置：请在 server/.env 填写 WECHAT_APPID 和 "
+        raise HTTPException(503, "微信登录未配置：请在 后端/.env 填写 WECHAT_APPID 和 "
                                  "WECHAT_APPSECRET 后重启后端")
     state = wechat.new_state(_safe_redirect(body.redirect))
     fallback = str(request.base_url).rstrip("/") + "/api/auth/wechat/callback"
