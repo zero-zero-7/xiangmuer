@@ -2823,6 +2823,7 @@ function currentDetailFid(){
 }
 
 function heroOf(featureId, idx, it){
+  if(featureId !== "fun" && it && it.img) return it.img;
   if(featureId === "fun") return it.imgData || ITEM_IMGS[it.img] || FEATURE_IMGS.fun;
   return ITEM_IMGS[IMG_MAP[featureId] + "_" + (idx+1)] || FEATURE_IMGS[featureId];
 }

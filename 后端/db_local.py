@@ -207,7 +207,8 @@ SCHEMA_SQLITE = [
     """CREATE TABLE IF NOT EXISTS content_items(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         feature_id TEXT NOT NULL, name TEXT NOT NULL,
-        tag TEXT DEFAULT '', summary TEXT DEFAULT '', sort INTEGER DEFAULT 0
+        tag TEXT DEFAULT '', summary TEXT DEFAULT '', sort INTEGER DEFAULT 0,
+        img TEXT DEFAULT ''
     )""",
     """CREATE TABLE IF NOT EXISTS content_sections(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -251,6 +252,7 @@ def ensure_columns():
         "comments": [("target_type", "TEXT DEFAULT 'post'")],
         "reports": [("handled_at", "TEXT DEFAULT ''"), ("handled_by", "INTEGER DEFAULT 0"),
                     ("result", "TEXT DEFAULT ''")],
+        "content_items": [("img", "TEXT DEFAULT ''")],
     }
     with _lock:
         conn = connect()

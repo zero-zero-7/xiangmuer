@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import os as _os
@@ -46,6 +47,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 内容配图目录（按功能区分文件夹，数据库里存 /images/xxx.jpg 相对路径）
+_IMG_DIR = BASE / "images"
+_IMG_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(_IMG_DIR)), name="images")
 
 
 # ------------------------------------------------------------------ 工具
@@ -139,7 +145,7 @@ def optional_uid(x_auth_token: Optional[str] = Header(default=None),
 # ------------------------------------------------------------------ 内容组装
 def content_items_full(fid: str) -> list:
     items = db.query(
-        "SELECT id, feature_id, name, tag, summary, sort FROM content_items"
+        "SELECT id, feature_id, name, tag, summary, sort, img FROM content_items"
         " WHERE feature_id = ? ORDER BY sort, id", (fid,))
     if not items:
         return []
@@ -179,7 +185,7 @@ def content_items_full(fid: str) -> list:
         out.append({
             "id": it["id"], "content_id": f"c{it['id']}", "feature_id": it["feature_id"],
             "name": it["name"], "tag": it["tag"] or "", "summary": it["summary"] or "",
-            "img": "", "author": "", "cat": "", "time": "", "likes": 0, "comments": 0,
+            "img": it.get("img") or "", "author": "", "cat": "", "time": "", "likes": 0, "comments": 0,
             "sections": sec_map.get(it["id"], []), "links": merged,
         })
     return out
