@@ -220,13 +220,37 @@ SCHEMA_SQLITE = [
         title TEXT DEFAULT '', source TEXT DEFAULT '', url TEXT NOT NULL,
         kind TEXT DEFAULT 'article', note TEXT DEFAULT '', sort INTEGER DEFAULT 0
     )""",
+    """CREATE TABLE IF NOT EXISTS audit_records(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_type TEXT NOT NULL, target_id TEXT NOT NULL,
+        admin_id INTEGER DEFAULT 0, action TEXT NOT NULL,
+        reason TEXT DEFAULT '', created_at TEXT DEFAULT ''
+    )""",
+    """CREATE TABLE IF NOT EXISTS ban_records(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL, admin_id INTEGER DEFAULT 0,
+        reason TEXT DEFAULT '', until TEXT DEFAULT '', created_at TEXT DEFAULT '',
+        lifted_at TEXT DEFAULT ''
+    )""",
+    """CREATE TABLE IF NOT EXISTS cancel_records(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL, requested_at TEXT DEFAULT '', effective_at TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending', created_at TEXT DEFAULT ''
+    )""",
 ]
 
 
 def ensure_columns():
     """给已存在的 local.db 补齐后加的列（幂等）"""
     extra = {
-        "users": [("wechat_openid", "TEXT"), ("wechat_unionid", "TEXT")],
+        "users": [("wechat_openid", "TEXT"), ("wechat_unionid", "TEXT"),
+                  ("ban_reason", "TEXT DEFAULT ''"), ("ban_until", "TEXT DEFAULT ''"),
+                  ("cancel_at", "TEXT DEFAULT ''")],
+        "posts": [("audit_at", "TEXT DEFAULT ''"), ("pinned_at", "TEXT DEFAULT ''"),
+                  ("reject_reason", "TEXT DEFAULT ''")],
+        "comments": [("target_type", "TEXT DEFAULT 'post'")],
+        "reports": [("handled_at", "TEXT DEFAULT ''"), ("handled_by", "INTEGER DEFAULT 0"),
+                    ("result", "TEXT DEFAULT ''")],
     }
     with _lock:
         conn = connect()
