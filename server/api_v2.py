@@ -14,10 +14,16 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-import db
+import os as _os
+if _os.getenv("DATABASE_URL", "").startswith("sqlite"):
+    import db_local as db
+else:
+    import db
+import wechat
 from security import hash_password, verify_password
 
 router = APIRouter(prefix="/api")
@@ -147,6 +153,10 @@ class PasswordLoginIn(BaseModel):
     password: str
 
 
+class WechatAuthorizeIn(BaseModel):
+    redirect: str = ""
+
+
 class AuditIn(BaseModel):
     action: str
     reason: str = ""
@@ -228,6 +238,106 @@ def password_login(body: PasswordLoginIn):
 @router.get("/auth/me")
 def auth_me(user: dict = Depends(user_of)):
     return {"user": public(user)}
+
+
+# ------------------------------------------------------------------ 微信登录
+def _safe_redirect(url: str) -> str:
+    url = (url or "").strip()
+    return url if url.startswith(("http://", "https://")) else ""
+
+
+def _result_page(title: str, message: str, ok: bool = True) -> HTMLResponse:
+    color = "#3A6B6B" if ok else "#B4552D"
+    html = f"""<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title></head>
+<body style="margin:0;background:#F6F1E7;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;color:#2E3A38">
+<div style="max-width:420px;margin:0 auto;padding:80px 24px;text-align:center">
+  <div style="width:64px;height:64px;margin:0 auto 20px;border-radius:16px;background:{color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700">四</div>
+  <h1 style="font-size:20px;margin:0 0 12px">{title}</h1>
+  <p style="font-size:14px;line-height:1.9;color:#6B7C79;margin:0">{message}</p>
+</div></body></html>"""
+    return HTMLResponse(html)
+
+
+def _wechat_user(info: dict, token_info: dict) -> dict:
+    """按 openid 查找已有用户，没有则创建真实微信账号"""
+    openid = (info.get("openid") or token_info.get("openid") or "").strip()
+    if not openid:
+        raise RuntimeError("微信未返回 openid")
+    row = db.query("SELECT * FROM users WHERE wechat_openid = ?", (openid,), one=True)
+    if row:
+        row = refresh_user_state(row)
+        if row.get("status") == "canceled":
+            raise RuntimeError("该微信账号已注销")
+        return row
+    nick = (info.get("nickname") or "").strip()[:16] or "微信用户" + openid[-4:]
+    uid = db.execute(
+        "INSERT INTO users(nickname, avatar, tag, points, phone, username, password_hash,"
+        " role, status, created_at, wechat_openid, wechat_unionid)"
+        " VALUES(?,?,?,?,NULL,NULL,'','user','normal',?,?,?)",
+        (nick, nick[:1] or "颐", "入门阶段", 0, now_str(), openid,
+         info.get("unionid") or token_info.get("unionid") or ""))
+    db.execute("INSERT IGNORE INTO settings(user_id) VALUES(?)", (uid,))
+    notify(uid, "欢迎加入四序颐养，愿你顺时而居、颐养身心。", "欢迎通知")
+    return db.query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
+
+
+@router.get("/auth/wechat/status")
+def wechat_status():
+    return {"configured": wechat.is_configured(), "mode": wechat.mode_text(),
+            "appid": wechat.APPID, "scope": wechat.SCOPE}
+
+
+@router.post("/auth/wechat/authorize")
+def wechat_authorize(body: WechatAuthorizeIn, request: Request):
+    if not wechat.is_configured():
+        raise HTTPException(503, "微信登录未配置：请在 server/.env 填写 WECHAT_APPID 和 "
+                                 "WECHAT_APPSECRET 后重启后端")
+    state = wechat.new_state(_safe_redirect(body.redirect))
+    fallback = str(request.base_url).rstrip("/") + "/api/auth/wechat/callback"
+    url = wechat.authorize_url(wechat.redirect_uri(fallback), state)
+    return {"state": state, "url": url, "qr": wechat.qr_svg(url),
+            "in_wechat": wechat.is_wechat_browser(request.headers.get("user-agent", "")),
+            "expires_in": wechat.STATE_TTL}
+
+
+@router.get("/auth/wechat/callback")
+def wechat_callback(code: str = "", state: str = ""):
+    rec = wechat.get_state(state)
+    if not rec:
+        return _result_page("授权已过期", "请回到应用重新发起微信登录。", ok=False)
+    if not code:
+        wechat.resolve(state, error="你取消了微信授权")
+        return _result_page("已取消授权", "你可以关闭本页，回到应用重新登录。", ok=False)
+    try:
+        token_info = wechat.exchange_code(code)
+        if wechat.SCOPE == "snsapi_base":
+            info = token_info
+        else:
+            info = wechat.fetch_userinfo(token_info["access_token"], token_info["openid"])
+        user = _wechat_user(info, token_info)
+    except Exception as e:
+        wechat.resolve(state, error=str(e))
+        return _result_page("登录失败", str(e), ok=False)
+    token = new_session(user["id"])
+    wechat.resolve(state, token=token, user=public(user))
+    target = rec.get("redirect") or ""
+    if target:
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(target + sep + "wx_state=" + state, status_code=302)
+    return _result_page("登录成功", f"已登录「{user['nickname']}」，请回到电脑继续操作。")
+
+
+@router.get("/auth/wechat/poll")
+def wechat_poll(state: str = ""):
+    rec = wechat.get_state(state)
+    if not rec:
+        return {"status": "expired", "token": "", "user": {},
+                "error": "二维码已过期，请重新发起"}
+    return {"status": rec["status"], "token": rec.get("token") or "",
+            "user": rec.get("user") or {}, "error": rec.get("error") or ""}
 
 
 # ------------------------------------------------------------------ 我的投稿

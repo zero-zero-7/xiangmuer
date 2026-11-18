@@ -18,13 +18,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-import db
+import os as _os
+_DATABASE_URL = _os.getenv("DATABASE_URL", "")
+if _DATABASE_URL.startswith("sqlite"):
+    import db_local as db
+else:
+    import db
 import seed as seed_mod
 import migrate as migrate_mod
 import api_v2
 
 BASE = Path(__file__).resolve().parent
-HTML_FILE = BASE.parent / "四序颐养.html"
+# 兼容本地（HTML 在父目录）和 Render 上（HTML 在 server 同级或 server 内）
+for _candidate in (BASE.parent / "四序颐养.html", BASE / "四序颐养.html"):
+    if _candidate.exists():
+        HTML_FILE = _candidate
+        break
+else:
+    HTML_FILE = BASE.parent / "四序颐养.html"  # fallback
 HOT_SEARCH = ["八段锦", "失眠", "湿气", "足三里", "山药", "泡脚", "立冬养生", "体质测试"]
 
 app = FastAPI(title="四序颐养 API")
@@ -289,11 +300,22 @@ def index():
     return FileResponse(HTML_FILE, media_type="text/html; charset=utf-8")
 
 
+@app.get("/MP_verify_{name}.txt")
+def mp_verify(name: str):
+    """微信公众平台域名校验文件（下载后放到 server/ 目录）"""
+    f = BASE / f"MP_verify_{name}.txt"
+    if not f.exists():
+        raise HTTPException(404, "校验文件不存在")
+    return FileResponse(f, media_type="text/plain; charset=utf-8")
+
+
 @app.get("/api/health")
 def health():
     try:
         db.query("SELECT 1", one=True)
-        return {"ok": True, "db": "mysql", "database": db.DB_CONF["database"]}
+        return {"ok": True,
+                "db": "sqlite" if _DATABASE_URL.startswith("sqlite") else "mysql",
+                "database": getattr(db, "DB_CONF", {}).get("database", "local.db")}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

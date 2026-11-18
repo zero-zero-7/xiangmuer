@@ -1,11 +1,12 @@
 """MySQL 数据访问层（数据库：siyu）
 
-连接串通过 server/.env 的 DATABASE_URL 配置：
+连接串通过 DATABASE_URL 环境变量配置：
     mysql://root:你的密码@127.0.0.1:3306/siyu
+    mysql://user:pass@xxx.psdb.cloud/dbname?ssl_mode=REQUIRED  (PlanetScale)
 """
 import os
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -28,7 +29,10 @@ def load_env():
 load_env()
 
 DB_URL = os.getenv("DATABASE_URL", "mysql://root@127.0.0.1:3306/siyu")
+# 兼容 mysql:// 和 mysql+pymysql://
 _u = urlparse(DB_URL.replace("mysql+pymysql://", "mysql://"))
+_q = parse_qs(_u.query)
+
 DB_CONF = dict(
     host=_u.hostname or "127.0.0.1",
     port=_u.port or 3306,
@@ -39,6 +43,12 @@ DB_CONF = dict(
     cursorclass=DictCursor,
     autocommit=False,
 )
+
+# PlanetScale / 云数据库强制 SSL
+_ssl_mode = (_q.get("ssl_mode") or [""])[0].upper()
+_is_planetscale = "psdb.cloud" in (DB_CONF["host"] or "")
+if _ssl_mode in ("REQUIRED", "VERIFY_IDENTITY", "VERIFY_CA") or _is_planetscale:
+    DB_CONF["ssl"] = {"ssl": True}
 
 
 def connect(with_db=True):
@@ -155,8 +165,6 @@ SCHEMA = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
 ]
 
-
-# ---------------------------------------------------------------- 业务扩展表
 SCHEMA_EXT = [
     """CREATE TABLE IF NOT EXISTS categories(
         id VARCHAR(32) PRIMARY KEY, name VARCHAR(32) NOT NULL, icon VARCHAR(16) DEFAULT '',
@@ -207,6 +215,8 @@ EXTRA_COLUMNS = {
         ("ban_reason", "VARCHAR(255) DEFAULT ''"),
         ("cancel_at", "VARCHAR(32) DEFAULT ''"),
         ("bio", "VARCHAR(255) DEFAULT ''"),
+        ("wechat_openid", "VARCHAR(64) NULL"),
+        ("wechat_unionid", "VARCHAR(64) NULL"),
     ],
     "posts": [
         ("status", "VARCHAR(16) DEFAULT 'approved'"),
@@ -239,6 +249,7 @@ EXTRA_COLUMNS = {
 
 INDEXES = [
     ("users", "uk_users_username", "UNIQUE KEY uk_users_username(username)"),
+    ("users", "uk_users_wechat_openid", "UNIQUE KEY uk_users_wechat_openid(wechat_openid)"),
     ("posts", "idx_posts_status", "KEY idx_posts_status(status)"),
     ("comments", "idx_comments_parent", "KEY idx_comments_parent(parent_id)"),
     ("reports", "idx_reports_status", "KEY idx_reports_status(status)"),
