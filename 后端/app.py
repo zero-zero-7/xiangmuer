@@ -308,7 +308,8 @@ def _page(is_mobile: bool):
     f = HTML_MOBILE if is_mobile else HTML_PC
     if not f.exists():
         raise HTTPException(404, f"未找到前端页面：{f}")
-    return FileResponse(f, media_type="text/html; charset=utf-8")
+    return FileResponse(f, media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/")
