@@ -2807,8 +2807,16 @@ function currentDetailFid(){
   return parts[0] === "list" ? parts[1] : "";
 }
 
+// 直接把 HTML 文件打开（file://）或跨域部署时，数据库里的 /images/... 需要补全后端域名
+function absUrl(u){
+  if(!u) return u;
+  if(/^(data:|blob:|https?:)/i.test(u)) return u;
+  if(/^https?:/i.test(API_BASE)) return API_BASE.replace(/\/api\/?$/, "") + u;
+  return u;
+}
+
 function heroOf(featureId, idx, it){
-  if(featureId !== "fun" && it && it.img) return it.img;
+  if(featureId !== "fun" && it && it.img) return absUrl(it.img);
   if(featureId === "fun") return it.imgData || ITEM_IMGS[it.img] || FEATURE_IMGS.fun;
   return ITEM_IMGS[IMG_MAP[featureId] + "_" + (idx+1)] || FEATURE_IMGS[featureId];
 }
@@ -5576,6 +5584,11 @@ async function loadAllContent(){
   try {
     const features = await api("/features").catch(()=>[]);
     const posts = await api("/posts").catch(()=>null);
+
+    if(!Array.isArray(features) || !features.length){
+      console.warn("⚠️ 未连接后端，当前显示的是内置演示内容（非数据库内容）");
+      showToast("未连接后端，正在显示内置演示内容");
+    }
 
     if(Array.isArray(features) && features.length){
       const settled = await Promise.allSettled(features.map(async f=>{
